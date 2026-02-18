@@ -1,0 +1,101 @@
+# Network Configuration for Multi-Device Monitoring
+# Copy to network_config.yml and customize for your environment
+#
+# SPDX-License-Identifier: MIT
+
+# =============================================================================
+# Network Interfaces to Monitor
+# =============================================================================
+interfaces:
+  # Primary WAN interface
+  - name: "eth0"
+    type: "wan"
+    label: "Primary WAN"
+    # Optional: expected gateway for this interface
+    gateway: "192.168.1.1"
+
+  # Backup WAN (e.g., LTE failover)
+  # - name: "lte0"
+  #   type: "wan_backup"
+  #   label: "LTE Backup"
+  #   gateway: "192.168.0.1"
+
+  # LAN interface
+  - name: "eth1"
+    type: "lan"
+    label: "LAN"
+
+  # Management network
+  # - name: "mgmt0"
+  #   type: "management"
+  #   label: "Management"
+
+# =============================================================================
+# Failover Configuration
+# =============================================================================
+failover:
+  # Enable failover monitoring
+  enabled: false
+
+  # Primary interface for internet connectivity
+  primary_interface: "eth0"
+
+  # Backup interface (activated when primary fails)
+  backup_interface: "lte0"
+
+  # Target to ping for connectivity tests
+  ping_targets:
+    - "8.8.8.8"        # Google DNS
+    - "1.1.1.1"        # Cloudflare DNS
+
+  # Number of failed pings before failover
+  failure_threshold: 3
+
+  # Seconds between connectivity checks
+  check_interval: 30
+
+# =============================================================================
+# VPN Configuration (Optional)
+# =============================================================================
+vpn:
+  # Enable VPN monitoring
+  enabled: false
+
+  # VPN interface name
+  interface: "wg0"
+
+  # VPN type: wireguard, openvpn, ipsec
+  type: "wireguard"
+
+  # Expected peer count (for WireGuard)
+  expected_peers: 5
+
+  # Alert if handshake older than (seconds)
+  handshake_timeout: 300  # 5 minutes
+
+# =============================================================================
+# DNS Configuration
+# =============================================================================
+dns:
+  # DNS servers to monitor
+  servers:
+    - "192.168.1.1"  # Local DNS
+    # - "8.8.8.8"    # External DNS
+
+  # Test domain for DNS resolution checks
+  test_domain: "google.com"
+
+# =============================================================================
+# Bandwidth Monitoring (Optional)
+# =============================================================================
+bandwidth:
+  # Enable bandwidth monitoring
+  enabled: false
+
+  # Interfaces to track bandwidth
+  track_interfaces:
+    - "eth0"
+    - "eth1"
+
+  # Alert threshold (MB/s)
+  alert_threshold: 100

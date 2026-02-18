@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.secrets
+alert_state.json
+venv/
+.venv/
+LINKEDIN_POST.md
+AGENTS.md

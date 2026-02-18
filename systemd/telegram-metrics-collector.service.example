@@ -1,0 +1,60 @@
+# telegram-metrics-collector.service
+# Periodic metrics collection and alerting
+#
+# Use with telegram-metrics-collector.timer for scheduled execution
+#
+# SPDX-License-Identifier: MIT
+
+[Unit]
+Description=Telegram Metrics Collector
+Documentation=https://github.com/fidpa/telegram-multi-device-monitor
+After=network-online.target
+
+[Service]
+Type=oneshot
+
+# === User Configuration ===
+User=telegram-monitor
+Group=telegram-monitor
+
+# === Paths - EDIT THESE ===
+WorkingDirectory=/opt/telegram-monitor
+ExecStart=/usr/bin/python3 /opt/telegram-monitor/src/alert_sender.py status
+
+# === Configuration ===
+EnvironmentFile=-/etc/telegram-monitor/env
+Environment=TELEGRAM_CONFIG_DIR=/etc/telegram-monitor
+
+# === Resource Limits ===
+MemoryMax=50M
+CPUQuota=50%
+TimeoutStartSec=60
+
+# === Security Hardening ===
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+PrivateDevices=true
+
+[Install]
+WantedBy=multi-user.target
+
+# ---
+# Companion timer file: telegram-metrics-collector.timer
+#
+# [Unit]
+# Description=Periodic Telegram Metrics Collection
+#
+# [Timer]
+# OnCalendar=*:0/30
+# Persistent=true
+# RandomizedDelaySec=60
+#
+# [Install]
+# WantedBy=timers.target

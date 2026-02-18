@@ -1,0 +1,68 @@
+# telegram-prometheus-webhook.service
+# Prometheus Alertmanager webhook receiver for Telegram
+#
+# SPDX-License-Identifier: MIT
+
+[Unit]
+Description=Prometheus Telegram Webhook
+Documentation=https://github.com/fidpa/telegram-multi-device-monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# === User Configuration ===
+User=telegram-monitor
+Group=telegram-monitor
+
+# === Paths - EDIT THESE ===
+WorkingDirectory=/opt/telegram-monitor
+ExecStart=/usr/bin/python3 /opt/telegram-monitor/src/prometheus_webhook.py
+
+# === Configuration ===
+EnvironmentFile=-/etc/telegram-monitor/env
+Environment=TELEGRAM_CONFIG_DIR=/etc/telegram-monitor
+Environment=FLASK_HOST=127.0.0.1
+Environment=FLASK_PORT=9094
+Environment=DEDUP_WINDOW_HOURS=24
+Environment=STATE_DIR=/var/lib/telegram-monitor
+
+# === Restart Policy ===
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# === Resource Limits ===
+MemoryMax=75M
+CPUQuota=25%
+TasksMax=30
+
+# === Security Hardening ===
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RemoveIPC=true
+PrivateDevices=true
+
+# State directory for alert deduplication
+StateDirectory=telegram-monitor
+StateDirectoryMode=0750
+
+# === Logging ===
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=telegram-webhook
+
+[Install]
+WantedBy=multi-user.target

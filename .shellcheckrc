@@ -1,0 +1,20 @@
+# .shellcheckrc - telegram-multi-device-monitor
+# ShellCheck configuration for Bash scripts
+# Best Practices 2025 compliant
+
+# Disabled checks (dynamic library paths)
+# SC1090: Can't follow non-constant source
+# SC1091: Not following source (file not found)
+disable=SC1090,SC1091
+
+# Shell dialect
+shell=bash
+
+# Source path for library resolution
+source-path=SCRIPTDIR
+
+# Allow following source statements
+external-sources=true
+
+# Minimum severity threshold (info, style, warning, error)
+severity=warning

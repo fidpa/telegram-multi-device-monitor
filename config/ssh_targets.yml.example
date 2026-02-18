@@ -1,0 +1,79 @@
+# SSH Targets Configuration for Multi-Device Monitoring
+# Copy to ssh_targets.yml and customize for your environment
+#
+# SPDX-License-Identifier: MIT
+
+# =============================================================================
+# SSH Connection Defaults
+# =============================================================================
+defaults:
+  # Path to SSH private key
+  key_path: "~/.ssh/id_ed25519"
+
+  # SSH connection timeout (seconds)
+  connect_timeout: 10
+
+  # Command execution timeout (seconds)
+  command_timeout: 15
+
+  # Maximum retry attempts for failed connections
+  max_retries: 3
+
+  # Base delay for exponential backoff (seconds)
+  retry_base_delay: 2
+
+# =============================================================================
+# Target Devices
+# =============================================================================
+targets:
+  # Primary device to monitor
+  - name: "primary_device"
+    host: "YOUR_DEVICE_IP"
+    user: "admin"
+    # Optional: override default key path
+    # key_path: "/path/to/custom/key"
+
+    # Device type affects which metrics are collected
+    # Options: linux, raspberry_pi, router, custom
+    type: "raspberry_pi"
+
+    # Services to monitor on this device
+    services:
+      - "docker"
+      - "nginx"
+      - "ssh"
+
+    # Custom commands to run for health checks
+    health_checks:
+      - name: "cpu_temp"
+        command: "vcgencmd measure_temp"
+        parser: "temp_c"  # Built-in parser for temperature
+
+  # Example: Secondary monitoring device
+  # - name: "watchdog_device"
+  #   host: "10.0.0.2"
+  #   user: "watchdog"
+  #   type: "linux"
+  #   services:
+  #     - "prometheus"
+  #     - "grafana"
+
+  # Example: NAS server
+  # - name: "nas_server"
+  #   host: "10.0.0.3"
+  #   user: "admin"
+  #   type: "linux"
+  #   services:
+  #     - "docker"
+  #     - "smbd"
+  #     - "nextcloud"
+
+# =============================================================================
+# Connection Pool Settings
+# =============================================================================
+pool:
+  # Maximum concurrent SSH connections
+  max_connections: 3
+
+  # Connection keep-alive interval (seconds)
+  keepalive_interval: 30

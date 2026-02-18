@@ -1,0 +1,67 @@
+# telegram-alert-bot.service
+# Lightweight Telegram alert bot for low-memory devices
+#
+# Optimized for devices with limited RAM (512MB or less)
+#
+# SPDX-License-Identifier: MIT
+
+[Unit]
+Description=Telegram Alert Bot (Lightweight)
+Documentation=https://github.com/fidpa/telegram-multi-device-monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# === User Configuration ===
+User=telegram-monitor
+Group=telegram-monitor
+
+# === Paths - EDIT THESE ===
+WorkingDirectory=/opt/telegram-monitor
+ExecStart=/usr/bin/python3 /opt/telegram-monitor/src/alert_bot.py
+
+# === Configuration ===
+EnvironmentFile=-/etc/telegram-monitor/env
+Environment=TELEGRAM_CONFIG_DIR=/etc/telegram-monitor
+
+# === Restart Policy ===
+Restart=always
+RestartSec=30
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+# === Resource Limits (Strict for Low Memory) ===
+MemoryMax=50M
+MemoryHigh=40M
+CPUQuota=25%
+TasksMax=20
+
+# Process priority (nice level)
+Nice=10
+
+# === Security Hardening ===
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RemoveIPC=true
+PrivateDevices=true
+
+# === Logging ===
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=telegram-alert
+
+[Install]
+WantedBy=multi-user.target

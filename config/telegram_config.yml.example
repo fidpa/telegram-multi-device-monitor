@@ -1,0 +1,84 @@
+# telegram-multi-device-monitor Configuration
+# Copy to telegram_config.yml and customize for your environment
+#
+# SPDX-License-Identifier: MIT
+
+# =============================================================================
+# Bot Identity
+# =============================================================================
+bot:
+  # Display name for your system in Telegram messages
+  system_name: "My Server"
+
+  # Prefix shown before alerts, e.g., "[SERVER]" or "[ROUTER]"
+  system_prefix: "[SERVER]"
+
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  log_level: "INFO"
+
+# =============================================================================
+# Telegram API Configuration
+# =============================================================================
+telegram:
+  # Bot token from @BotFather (format: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz)
+  # Can also be set via TELEGRAM_BOT_TOKEN environment variable
+  token: "YOUR_BOT_TOKEN_HERE"
+
+  # Chat ID where messages will be sent
+  # Get your chat ID by messaging @userinfobot on Telegram
+  # Can also be set via TELEGRAM_CHAT_ID environment variable
+  chat_id: "YOUR_CHAT_ID_HERE"
+
+  # Admin user IDs allowed to run privileged commands (comma-separated)
+  # These users can restart services, view sensitive logs, etc.
+  admin_ids:
+    - "123456789"
+    # - "987654321"  # Add more admins as needed
+
+  # Rate limiting: minimum seconds between duplicate alerts
+  rate_limit_window: 60
+
+# =============================================================================
+# Timeouts (seconds)
+# =============================================================================
+timeouts:
+  # General subprocess command timeout
+  subprocess: 30
+
+  # Fast hardware queries (temperature, etc.)
+  hardware_query: 5
+
+  # Docker operations
+  docker: 10
+
+  # Route checking commands
+  route_check: 10
+
+  # Network connectivity ping tests
+  ping: 8
+
+# =============================================================================
+# Logging Configuration
+# =============================================================================
+logging:
+  # Directory for log files
+  log_dir: "/var/log/telegram-monitor"
+
+  # Maximum size per log file (bytes)
+  max_bytes: 10485760  # 10MB
+
+  # Number of backup log files to keep
+  backup_count: 3
+
+# =============================================================================
+# Memory Management (for low-memory devices)
+# =============================================================================
+memory:
+  # Maximum memory limit in MB (triggers GC if exceeded)
+  limit_mb: 50
+
+  # Garbage collection interval in seconds
+  gc_interval: 300
+
+  # Memory threshold in MB for automatic GC
+  threshold_mb: 45

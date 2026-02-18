@@ -1,0 +1,83 @@
+# telegram-interactive-bot.service
+# Full-featured Telegram monitoring bot
+#
+# Installation:
+#   sudo cp telegram-interactive-bot.service.example /etc/systemd/system/telegram-interactive-bot.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now telegram-interactive-bot.service
+#
+# SPDX-License-Identifier: MIT
+
+[Unit]
+Description=Telegram Interactive Monitor Bot
+Documentation=https://github.com/fidpa/telegram-multi-device-monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# === User Configuration ===
+User=telegram-monitor
+Group=telegram-monitor
+
+# === Paths - EDIT THESE ===
+WorkingDirectory=/opt/telegram-monitor
+ExecStart=/usr/bin/python3 /opt/telegram-monitor/src/interactive_bot.py
+
+# === Configuration ===
+# ⚠️ SECURITY: Never put tokens directly in this file!
+# Tokens set here are visible via 'systemctl show' and may be logged.
+#
+# RECOMMENDED: Use environment file with restricted permissions (chmod 600)
+EnvironmentFile=-/etc/telegram-monitor/env
+# EnvironmentFile=-/run/telegram-monitor/env  # For token_fetcher.sh
+
+# Option 3: Config directory
+Environment=TELEGRAM_CONFIG_DIR=/etc/telegram-monitor
+
+# === Token Fetcher (Optional) ===
+# Uncomment to fetch token from secret manager at startup
+# ExecStartPre=/opt/telegram-monitor/src/token_fetcher.sh
+# RuntimeDirectory=telegram-monitor
+# RuntimeDirectoryMode=0750
+
+# === Restart Policy ===
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# === Resource Limits ===
+MemoryMax=100M
+CPUQuota=50%
+TasksMax=50
+
+# === Security Hardening ===
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RemoveIPC=true
+PrivateDevices=true
+
+# Allow reading from config and log directories
+ReadWritePaths=/var/log/telegram-monitor
+ReadOnlyPaths=/etc/telegram-monitor
+
+# === Logging ===
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=telegram-bot
+
+[Install]
+WantedBy=multi-user.target

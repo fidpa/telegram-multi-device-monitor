@@ -1,0 +1,86 @@
+# Service Monitoring Configuration
+# Copy to service_monitoring.yml and customize for your environment
+#
+# SPDX-License-Identifier: MIT
+
+# =============================================================================
+# Critical Services
+# These services are essential - their failure triggers immediate alerts
+# =============================================================================
+critical_services:
+  # Core system services
+  - "ssh"
+  - "docker"
+
+  # Add your critical services here:
+  # - "nginx"
+  # - "postgresql"
+  # - "your-api-service"
+
+# =============================================================================
+# Important Services
+# These services are monitored but non-critical
+# =============================================================================
+important_services:
+  # Monitoring and logging
+  - "prometheus"
+  - "grafana"
+
+  # Add your important services here:
+  # - "node-exporter"
+  # - "loki"
+
+# =============================================================================
+# Services Allowed for Remote Restart
+# Security: Only these services can be restarted via /restart command
+# =============================================================================
+allowed_restart:
+  # System services that are safe to restart
+  - "docker"
+  - "nginx"
+
+  # Add services that admins can safely restart:
+  # - "your-api-service"
+  # - "prometheus"
+
+  # NEVER add sensitive services like:
+  # - sshd (would lock you out)
+  # - systemd-networkd (network loss)
+
+# =============================================================================
+# Service Groups (for organized status display)
+# =============================================================================
+groups:
+  infrastructure:
+    label: "🏗️ Infrastructure"
+    services:
+      - "docker"
+      - "nginx"
+
+  monitoring:
+    label: "📊 Monitoring"
+    services:
+      - "prometheus"
+      - "grafana"
+
+  # Add your own groups:
+  # applications:
+  #   label: "📱 Applications"
+  #   services:
+  #     - "your-app"
+  #     - "your-api"
+
+# =============================================================================
+# Alert Thresholds
+# =============================================================================
+thresholds:
+  # Consecutive failures before alerting
+  failure_count: 2
+
+  # Seconds to wait between service checks
+  check_interval: 60
+
+  # Quiet hours (no non-critical alerts)
+  quiet_hours:
+    start: 22  # 10 PM
+    end: 7     # 7 AM
