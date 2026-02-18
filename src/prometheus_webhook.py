@@ -339,14 +339,17 @@ def webhook():
         logger.info(
             f"Processed {len(alerts)} alerts: {sent_count} sent, {suppressed_count} suppressed"
         )
-        return jsonify(
-            {
-                "status": "ok",
-                "total": len(alerts),
-                "sent": sent_count,
-                "suppressed": suppressed_count,
-            }
-        ), 200
+        return (
+            jsonify(
+                {
+                    "status": "ok",
+                    "total": len(alerts),
+                    "sent": sent_count,
+                    "suppressed": suppressed_count,
+                }
+            ),
+            200,
+        )
 
     except (KeyError, ValueError, TypeError) as e:
         logger.error(f"Invalid webhook payload: {e}")
@@ -365,9 +368,12 @@ def health():
 @app.route("/templates", methods=["GET"])
 def list_templates():
     """List available alert templates."""
-    return jsonify(
-        {"templates": list(ALERT_TEMPLATES.keys()), "count": len(ALERT_TEMPLATES)}
-    ), 200
+    return (
+        jsonify(
+            {"templates": list(ALERT_TEMPLATES.keys()), "count": len(ALERT_TEMPLATES)}
+        ),
+        200,
+    )
 
 
 def main() -> int:

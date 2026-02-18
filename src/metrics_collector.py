@@ -161,9 +161,7 @@ class MetricsCollector:
         except (OSError, AttributeError):
             return None
 
-    def get_service_status(
-        self, services: list[str] | None = None
-    ) -> dict[str, str]:
+    def get_service_status(self, services: list[str] | None = None) -> dict[str, str]:
         """
         Get status of systemd services.
 
@@ -260,7 +258,9 @@ class RemoteMetricsCollector:
                 if result.returncode == 0:
                     return result.stdout.strip()
                 else:
-                    print(f"SSH command failed (rc={result.returncode}): {result.stderr.strip()}")
+                    print(
+                        f"SSH command failed (rc={result.returncode}): {result.stderr.strip()}"
+                    )
                     return None
 
             except subprocess.TimeoutExpired:
@@ -284,7 +284,9 @@ class RemoteMetricsCollector:
 
     def get_cpu_temperature(self) -> float | None:
         """Get CPU temperature from remote device."""
-        output = self.ssh_command("vcgencmd measure_temp 2>/dev/null || cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null")
+        output = self.ssh_command(
+            "vcgencmd measure_temp 2>/dev/null || cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null"
+        )
         if output:
             # Try vcgencmd format first
             if "temp=" in output:
@@ -352,9 +354,7 @@ class RemoteMetricsCollector:
                     pass
         return None
 
-    def get_service_status(
-        self, services: list[str] | None = None
-    ) -> dict[str, str]:
+    def get_service_status(self, services: list[str] | None = None) -> dict[str, str]:
         """Get service status from remote device."""
         if services is None:
             services = SERVICE_CONFIG.get("critical_services", []) + SERVICE_CONFIG.get(
@@ -435,11 +435,17 @@ def main() -> int:
             print(f"Host: {metrics['host']}")
         print(f"CPU Temp: {metrics.get('cpu_temp', 'N/A')}°C")
         if metrics.get("memory"):
-            print(f"Memory: {metrics['memory']['percentage']}% ({metrics['memory']['used_mb']}/{metrics['memory']['total_mb']} MB)")
+            print(
+                f"Memory: {metrics['memory']['percentage']}% ({metrics['memory']['used_mb']}/{metrics['memory']['total_mb']} MB)"
+            )
         if metrics.get("disk"):
-            print(f"Disk: {metrics['disk']['percentage']}% ({metrics['disk']['used']}/{metrics['disk']['size']})")
+            print(
+                f"Disk: {metrics['disk']['percentage']}% ({metrics['disk']['used']}/{metrics['disk']['size']})"
+            )
         if metrics.get("load"):
-            print(f"Load: {metrics['load']['load_1min']:.2f} / {metrics['load']['load_5min']:.2f} / {metrics['load']['load_15min']:.2f}")
+            print(
+                f"Load: {metrics['load']['load_1min']:.2f} / {metrics['load']['load_5min']:.2f} / {metrics['load']['load_15min']:.2f}"
+            )
         if metrics.get("services"):
             print("Services:")
             for svc, status in metrics["services"].items():

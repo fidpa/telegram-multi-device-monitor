@@ -163,9 +163,7 @@ def format_services_message(metrics: dict[str, Any] | None = None) -> str:
 
         # Other services (not in critical or important)
         other_services = [
-            s
-            for s in metrics["services"]
-            if s not in critical and s not in important
+            s for s in metrics["services"] if s not in critical and s not in important
         ]
         if other_services:
             message += "\n📋 Other Services:\n"

@@ -426,7 +426,9 @@ class TelegramAlertBot:
 
             if result.returncode == 0:
                 await update.message.reply_text(f"✅ {service} restarted successfully")
-                logger.info(f"Service {service} restarted by {update.effective_user.username}")
+                logger.info(
+                    f"Service {service} restarted by {update.effective_user.username}"
+                )
             else:
                 await update.message.reply_text(
                     f"❌ Failed to restart {service}: {result.stderr[:100]}"
@@ -437,7 +439,9 @@ class TelegramAlertBot:
             await update.message.reply_text(f"❌ Restart timed out for {service}")
         except (subprocess.SubprocessError, OSError) as e:
             logger.error(f"Service restart failed for {service}: {e}")
-            await update.message.reply_text("❌ Service restart failed. Check logs for details.")
+            await update.message.reply_text(
+                "❌ Service restart failed. Check logs for details."
+            )
 
     async def memory_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -548,9 +552,7 @@ async def async_main() -> int:
 
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(
-                sig, lambda: asyncio.create_task(bot.shutdown())
-            )
+            loop.add_signal_handler(sig, lambda: asyncio.create_task(bot.shutdown()))
 
         await bot.run()
         return 0

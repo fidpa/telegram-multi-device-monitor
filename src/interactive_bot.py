@@ -545,9 +545,7 @@ class InteractiveBot:
         user_id = str(update.effective_user.id)
 
         if user_id not in self.config.admin_ids:
-            await update.message.reply_text(
-                "❌ Unauthorized: Admin access required"
-            )
+            await update.message.reply_text("❌ Unauthorized: Admin access required")
             return
 
         if not context.args:
@@ -655,9 +653,7 @@ class InteractiveBot:
 
             except (subprocess.SubprocessError, OSError) as e:
                 logger.error(f"Restart failed: {e}")
-                await query.edit_message_text(
-                    f"❌ Error restarting service: {str(e)}"
-                )
+                await query.edit_message_text(f"❌ Error restarting service: {str(e)}")
 
     async def logs_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -821,9 +817,7 @@ class InteractiveBot:
         self.application.add_handler(CommandHandler("h", self.help_command))
 
         # Callback handler for inline keyboards
-        self.application.add_handler(
-            CallbackQueryHandler(self.handle_restart_callback)
-        )
+        self.application.add_handler(CallbackQueryHandler(self.handle_restart_callback))
 
     async def start_bot(self) -> None:
         """Start the bot."""
@@ -859,7 +853,9 @@ class InteractiveBot:
         logger.info("Stopping bot...")
 
         if self.application:
-            await self.send_alert("INFO", "Bot Stopping", {"Reason": "Service shutdown"})
+            await self.send_alert(
+                "INFO", "Bot Stopping", {"Reason": "Service shutdown"}
+            )
             await self.application.updater.stop()
             await self.application.stop()
             await self.application.shutdown()
