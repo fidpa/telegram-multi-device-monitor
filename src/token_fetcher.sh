@@ -21,7 +21,6 @@
 #   0 - Success (token from secret manager or fallback)
 #   1 - Failure (no token available)
 #
-# Version: 1.0.0
 #
 set -uo pipefail
 

@@ -16,7 +16,6 @@
 #   - Config file (telegram_config.yml)
 #   - Secrets file ($CONFIG_DIR/.secrets)
 #
-# Version: 1.0.0
 #
 set -uo pipefail
 

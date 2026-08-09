@@ -25,7 +25,6 @@ Usage:
 Configuration:
     Uses config/telegram_config.yml or environment variables.
 
-Version: 1.0.0
 """
 
 import asyncio

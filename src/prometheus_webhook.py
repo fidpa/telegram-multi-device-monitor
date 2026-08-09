@@ -26,7 +26,6 @@ Environment Variables:
     FLASK_HOST: Bind address (default: 127.0.0.1)
     FLASK_PORT: Port number (default: 9094)
 
-Version: 1.0.0
 """
 
 import hashlib
@@ -39,7 +38,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 
 # Logging Configuration
 logging.basicConfig(
@@ -134,7 +133,8 @@ def load_alert_state() -> dict[str, float]:
     try:
         if STATE_FILE.exists():
             with open(STATE_FILE, "r") as f:
-                return json.load(f)
+                state: dict[str, float] = json.load(f)
+                return state
     except Exception as e:
         logger.warning(f"Failed to load alert state: {e}")
     return {}
@@ -271,7 +271,7 @@ def send_telegram_alert(message: str) -> bool:
 
 @app.route("/webhook", methods=["POST"])
 @app.route("/api/v2/alerts", methods=["POST"])
-def webhook():
+def webhook() -> tuple[Response, int]:
     """
     Webhook endpoint for Prometheus alerts.
 
@@ -360,13 +360,13 @@ def webhook():
 
 
 @app.route("/health", methods=["GET"])
-def health():
+def health() -> tuple[Response, int]:
     """Health check endpoint."""
     return jsonify({"status": "healthy"}), 200
 
 
 @app.route("/templates", methods=["GET"])
-def list_templates():
+def list_templates() -> tuple[Response, int]:
     """List available alert templates."""
     return (
         jsonify(

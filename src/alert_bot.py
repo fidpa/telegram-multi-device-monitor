@@ -22,7 +22,6 @@ Configuration:
     Uses config/telegram_config.yml for settings.
     Credentials from environment or config file.
 
-Version: 1.0.0
 """
 
 import asyncio
@@ -41,13 +40,21 @@ from pathlib import Path
 from typing import Any
 
 import psutil
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+    Update,
+    User,
+)
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
+    Updater,
 )
 
 # Import local config loader
@@ -57,8 +64,51 @@ except ImportError:
     sys.path.insert(0, str(Path(__file__).parent))
     from config_loader import load_config, load_service_monitoring
 
+
+# ============================================================================
+# Update accessors
+# ============================================================================
+#
+# Telegram models message, user and callback query as optional on Update,
+# because a single Update object covers every kind of event. The handlers
+# below are registered for commands and callback queries only, so the
+# attribute they need is always present at runtime - but the type cannot say
+# so. These accessors turn "impossible" into a loud failure instead of an
+# AttributeError deep inside a handler.
+
+BotApplication = Application[Any, Any, Any, Any, Any, Any]
+
+
+def require_message(update: Update) -> Message:
+    """Return the message this update carries."""
+    if update.message is None:
+        raise RuntimeError("handler received an update without a message")
+    return update.message
+
+
+def require_user(update: Update) -> User:
+    """Return the user this update originated from."""
+    if update.effective_user is None:
+        raise RuntimeError("handler received an update without a user")
+    return update.effective_user
+
+
+def require_query(update: Update) -> CallbackQuery:
+    """Return the callback query this update carries."""
+    if update.callback_query is None:
+        raise RuntimeError("handler received an update without a callback query")
+    return update.callback_query
+
+
+def require_updater(application: BotApplication) -> Updater:
+    """Return the polling updater of an application built for long polling."""
+    if application.updater is None:
+        raise RuntimeError("application was built without an updater")
+    return application.updater
+
+
 # Configure logging with fallback for missing log directory
-log_handlers = [logging.StreamHandler()]
+log_handlers: list[logging.Handler] = [logging.StreamHandler()]
 
 # Load configuration
 CONFIG = load_config()
@@ -198,8 +248,8 @@ class AlertBatcher:
     __slots__ = ["_queue", "_batch_task", "_batch_window", "_max_batch_size"]
 
     def __init__(self, batch_window: int = 10) -> None:
-        self._queue: deque = deque(maxlen=100)
-        self._batch_task: asyncio.Task | None = None
+        self._queue: deque[dict[str, Any]] = deque(maxlen=100)
+        self._batch_task: asyncio.Task[Any] | None = None
         self._batch_window = batch_window
         self._max_batch_size = 10
 
@@ -264,7 +314,7 @@ class TelegramAlertBot:
         self.memory_manager = MemoryManager()
         self.alert_batcher = AlertBatcher(config.batch_window)
         self.ssh_pool = SSHConnectionPool(config.ssh_max_connections)
-        self.application: Application | None = None
+        self.application: BotApplication | None = None
 
         # 2FA tracking
         self.auth_attempts: dict[str, list[datetime]] = {}
@@ -277,7 +327,7 @@ class TelegramAlertBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """Handle /start command."""
-        await update.message.reply_text(
+        await require_message(update).reply_text(
             "🤖 *Alert Bot*\n"
             "Lightweight monitoring bot optimized for low memory.\n\n"
             "Commands:\n"
@@ -293,7 +343,7 @@ class TelegramAlertBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """Handle /status command."""
-        await update.message.reply_text("⏳ Checking system status...")
+        await require_message(update).reply_text("⏳ Checking system status...")
 
         # Check memory first
         memory = await self.memory_manager.check_memory()
@@ -314,18 +364,20 @@ class TelegramAlertBot:
             f"🌡 Temp: {self._get_cpu_temp()}°C\n"
         )
 
-        await update.message.reply_text(status_text, parse_mode=ParseMode.MARKDOWN)
+        await require_message(update).reply_text(
+            status_text, parse_mode=ParseMode.MARKDOWN
+        )
 
     async def restart_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """Handle /restart command (requires admin + 2FA)."""
-        user = update.effective_user
+        user = require_user(update)
 
         # Check if user is admin
         if str(user.id) not in self.config.admin_ids:
             logger.warning(f"Unauthorized restart attempt by {user.username}")
-            await update.message.reply_text(
+            await require_message(update).reply_text(
                 "❌ Unauthorized. This incident has been logged."
             )
             return
@@ -342,13 +394,13 @@ class TelegramAlertBot:
         import random
         import string
 
-        user = update.effective_user
+        user = require_user(update)
         code = "".join(random.choices(string.digits, k=6))
         self.two_fa_codes[str(user.id)] = code
 
         logger.info(f"2FA code for {user.username}: {code}")
 
-        await update.message.reply_text(
+        await require_message(update).reply_text(
             "🔐 *Two-Factor Authentication Required*\n"
             "A 6-digit code has been generated.\n"
             "Reply with: `/auth CODE` to continue.",
@@ -359,30 +411,30 @@ class TelegramAlertBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """Handle 2FA authentication."""
-        user = update.effective_user
+        user = require_user(update)
 
         if not context.args or len(context.args) != 1:
-            await update.message.reply_text("Usage: /auth CODE")
+            await require_message(update).reply_text("Usage: /auth CODE")
             return
 
         provided_code = context.args[0]
         expected_code = self.two_fa_codes.get(str(user.id))
 
         if not expected_code:
-            await update.message.reply_text("❌ No authentication requested")
+            await require_message(update).reply_text("❌ No authentication requested")
             return
 
         if provided_code == expected_code:
             self.config.admin_sessions[str(user.id)] = datetime.now()
             del self.two_fa_codes[str(user.id)]
-            await update.message.reply_text(
+            await require_message(update).reply_text(
                 "✅ Authentication successful!\n"
                 "Session valid for 1 hour.\n"
                 "You can now use admin commands."
             )
             logger.info(f"2FA successful for {user.username}")
         else:
-            await update.message.reply_text("❌ Invalid code")
+            await require_message(update).reply_text("❌ Invalid code")
             logger.warning(f"2FA failed for {user.username}")
 
     async def _handle_restart(
@@ -400,7 +452,7 @@ class TelegramAlertBot:
             )
             reply_markup = InlineKeyboardMarkup(buttons)
 
-            await update.message.reply_text(
+            await require_message(update).reply_text(
                 "Select service to restart:", reply_markup=reply_markup
             )
         else:
@@ -410,10 +462,12 @@ class TelegramAlertBot:
     async def _restart_service(self, update: Update, service: str) -> None:
         """Restart a specific service."""
         if service not in self.allowed_services:
-            await update.message.reply_text(f"❌ Service '{service}' not allowed")
+            await require_message(update).reply_text(
+                f"❌ Service '{service}' not allowed"
+            )
             return
 
-        await update.message.reply_text(f"♻️ Restarting {service}...")
+        await require_message(update).reply_text(f"♻️ Restarting {service}...")
 
         try:
             result = subprocess.run(
@@ -425,21 +479,25 @@ class TelegramAlertBot:
             )
 
             if result.returncode == 0:
-                await update.message.reply_text(f"✅ {service} restarted successfully")
+                await require_message(update).reply_text(
+                    f"✅ {service} restarted successfully"
+                )
                 logger.info(
-                    f"Service {service} restarted by {update.effective_user.username}"
+                    f"Service {service} restarted by {require_user(update).username}"
                 )
             else:
-                await update.message.reply_text(
+                await require_message(update).reply_text(
                     f"❌ Failed to restart {service}: {result.stderr[:100]}"
                 )
 
         except subprocess.TimeoutExpired:
             logger.error(f"Service restart timed out: {service}")
-            await update.message.reply_text(f"❌ Restart timed out for {service}")
+            await require_message(update).reply_text(
+                f"❌ Restart timed out for {service}"
+            )
         except (subprocess.SubprocessError, OSError) as e:
             logger.error(f"Service restart failed for {service}: {e}")
-            await update.message.reply_text(
+            await require_message(update).reply_text(
                 "❌ Service restart failed. Check logs for details."
             )
 
@@ -462,17 +520,18 @@ class TelegramAlertBot:
             f"⚠️ Bot limit: {memory['threshold_mb']}MB\n"
         )
 
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        await require_message(update).reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
     async def callback_handler(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """Handle callback queries from inline keyboards."""
-        query = update.callback_query
+        query = require_query(update)
         await query.answer()
 
-        if query.data.startswith("restart_"):
-            service = query.data.replace("restart_", "")
+        data = query.data or ""
+        if data.startswith("restart_"):
+            service = data.replace("restart_", "")
             if service == "cancel":
                 await query.edit_message_text("Restart cancelled.")
             else:
@@ -520,7 +579,7 @@ class TelegramAlertBot:
 
         logger.info("Alert bot started successfully")
 
-        await self.application.updater.start_polling(
+        await require_updater(self.application).start_polling(
             allowed_updates=Update.ALL_TYPES, drop_pending_updates=True
         )
 
@@ -538,7 +597,7 @@ class TelegramAlertBot:
         """Graceful shutdown."""
         logger.info("Shutting down alert bot...")
         if self.application:
-            await self.application.updater.stop()
+            await require_updater(self.application).stop()
             await self.application.stop()
             await self.application.shutdown()
         logger.info("Alert bot shutdown complete")

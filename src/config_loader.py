@@ -108,7 +108,7 @@ def get_config_dir() -> Path:
     return locations[0]
 
 
-def deep_merge(base: dict, override: dict) -> dict:
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """
     Deep merge two dictionaries, with override taking precedence.
 
@@ -169,11 +169,12 @@ def load_config(config_file: Path | None = None) -> dict[str, Any]:
     }
 
     for env_var, path in env_overrides.items():
-        value = os.environ.get(env_var)
-        if value:
+        raw = os.environ.get(env_var)
+        if raw:
+            value: Any = raw
             if path[1] == "admin_ids":
                 # Parse comma-separated list
-                value = [v.strip() for v in value.split(",") if v.strip()]
+                value = [v.strip() for v in raw.split(",") if v.strip()]
             # Navigate to nested key and set value
             section = config.get(path[0], {})
             section[path[1]] = value
@@ -204,7 +205,8 @@ def load_ssh_targets(config_file: Path | None = None) -> list[dict[str, Any]]:
     with open(config_file, "r") as f:
         data = yaml.safe_load(f) or {}
 
-    return data.get("targets", [])
+    targets: list[dict[str, Any]] = data.get("targets", [])
+    return targets
 
 
 def load_service_monitoring(config_file: Path | None = None) -> dict[str, Any]:
@@ -221,7 +223,7 @@ def load_service_monitoring(config_file: Path | None = None) -> dict[str, Any]:
         config_dir = get_config_dir()
         config_file = config_dir / "service_monitoring.yml"
 
-    defaults = {
+    defaults: dict[str, Any] = {
         "critical_services": [],
         "important_services": [],
         "allowed_restart": [],

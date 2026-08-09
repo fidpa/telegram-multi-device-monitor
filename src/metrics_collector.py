@@ -29,7 +29,6 @@ Usage:
 Configuration:
     SSH targets can be configured in config/ssh_targets.yml
 
-Version: 1.0.0
 """
 
 import json
@@ -416,6 +415,7 @@ def main() -> int:
 
     args = parser.parse_args()
 
+    collector: MetricsCollector | RemoteMetricsCollector
     if args.remote:
         collector = RemoteMetricsCollector(
             host=args.remote,

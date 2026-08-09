@@ -8,3 +8,5 @@ venv/
 .venv/
 LINKEDIN_POST.md
 AGENTS.md
+CLAUDE.md
+.claude/

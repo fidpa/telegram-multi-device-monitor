@@ -21,9 +21,6 @@ set -uo pipefail
 # Configuration
 # ============================================================================
 
-readonly SCRIPT_NAME="install.sh"
-readonly VERSION="1.0.0"
-
 # Installation paths
 readonly INSTALL_DIR="/opt/telegram-monitor"
 readonly CONFIG_DIR="/etc/telegram-monitor"
@@ -41,6 +38,38 @@ readonly NC='\033[0m' # No Color
 # Source directory (where this script is)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
+
+# ============================================================================
+# Project version
+# ============================================================================
+#
+# The version lives in exactly one place: the VERSION file at the repository
+# root. Everything that reports a version reads it from there. A literal in
+# this script would be a second place to maintain, and a second place drifts.
+#
+# Two candidate paths because the repository layout and the installed layout
+# differ: <repo>/VERSION next to this script, and ${INSTALL_DIR}/VERSION in a
+# deployed tree. A missing or malformed file yields "unknown" rather than an
+# abort - the installer must still run when someone extracts a tarball without
+# the VERSION file.
+resolve_version() {
+    local candidates=("$SCRIPT_DIR/VERSION" "$INSTALL_DIR/VERSION")
+    local candidate version
+
+    for candidate in "${candidates[@]}"; do
+        [[ -r "$candidate" ]] || continue
+        read -r version < "$candidate" || continue
+        if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            printf '%s\n' "$version"
+            return 0
+        fi
+    done
+
+    printf 'unknown\n'
+}
+
+VERSION="$(resolve_version)"
+readonly VERSION
 
 # ============================================================================
 # Logging Functions
@@ -173,6 +202,11 @@ copy_files() {
     # Source files
     sudo cp -r "$SCRIPT_DIR/src" "$INSTALL_DIR/"
     sudo chmod +x "$INSTALL_DIR/src/"*.sh 2>/dev/null || true
+
+    # Version marker, so an installed tree can state which release it is
+    if [[ -f "$SCRIPT_DIR/VERSION" ]]; then
+        sudo cp "$SCRIPT_DIR/VERSION" "$INSTALL_DIR/VERSION"
+    fi
 
     # Config templates
     if [[ ! -f "$CONFIG_DIR/telegram_config.yml" ]]; then

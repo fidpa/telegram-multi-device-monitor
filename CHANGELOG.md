@@ -5,6 +5,48 @@ All notable changes to telegram-multi-device-monitor will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-08-09
+
+### Fixed
+
+**CI pipeline (`lint.yml`) was red and nobody could see it:**
+- **`mypy --strict src/*.py` reported 89 errors across 5 files.** Reproduced in
+  a clean virtualenv with `black mypy types-PyYAML types-requests` plus
+  `requirements.txt`, matching what the workflow installs. 67 of them were a
+  single cause: `telegram.Update` types `message`, `effective_user` and
+  `callback_query` as optional, because one Update object covers every kind of
+  event. The remainder were unparameterised generics, four missing return
+  annotations and a mistyped log handler list.
+- **`shellcheck -S warning` reported SC2034 in `install.sh`** — an unused
+  `SCRIPT_NAME` constant. A single warning is enough to fail the job.
+- **`types-psutil` added to the workflow's install step**, which removes five
+  `Library stubs not installed for "psutil"` errors that no source change could
+  fix.
+- The previous release commit is titled `fix: resolve lint failures in CI
+  pipeline`; it fixed YAML and Black formatting only. GitHub reports
+  `total_count: 0` for both workflow runs and registered workflows, and the
+  badge URL returns 404 — so no run ever confirmed the state either way.
+
+### Changed
+
+- **Optional Telegram update fields are now resolved through named accessors.**
+  `require_message`, `require_user`, `require_query` and `require_updater` in
+  both bot modules replace direct attribute access. This is a behaviour change,
+  not only a typing one: an update without the expected field previously died
+  with an `AttributeError` somewhere inside a handler and now raises a named
+  `RuntimeError`. No handler catches more or less than before.
+- **The version now lives in a single `VERSION` file at the repository root.**
+  It was previously spread across eight places: `readonly VERSION="1.0.0"` in
+  `install.sh` and a `Version: 1.0.0` header line in seven files under `src/`
+  (five Python docstrings, two Bash comments). None of them were part of any
+  release procedure, so all seven header lines would have kept claiming 1.0.0.
+  `install.sh` reads the file through `resolve_version()`, which handles both
+  the repository layout and an installed tree and falls back to `unknown`
+  instead of aborting when the file is missing or malformed. It also copies
+  `VERSION` into the install directory, so a deployed tree can state its own
+  version.
+- `.gitignore` now covers `CLAUDE.md` and `.claude/`.
+
 ## [1.0.0] - 2026-02-04
 
 ### Added
@@ -95,4 +137,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Minimum 512MB RAM
 - Works with any Linux distribution
 
+[1.0.1]: https://github.com/fidpa/telegram-multi-device-monitor/releases/tag/v1.0.1
 [1.0.0]: https://github.com/fidpa/telegram-multi-device-monitor/releases/tag/v1.0.0

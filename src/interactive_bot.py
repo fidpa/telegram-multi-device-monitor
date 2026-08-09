@@ -28,7 +28,6 @@ Configuration:
 Telegram Commands:
     /status, /services, /docker, /metrics, /logs, /restart, /help
 
-Version: 1.0.0
 """
 
 import asyncio
@@ -43,16 +42,26 @@ import sys
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
+from types import FrameType
 from typing import Any
 
 import psutil
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (
+    Bot,
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+    Update,
+    User,
+)
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
+    Updater,
 )
 
 # Import local config loader
@@ -62,6 +71,46 @@ except ImportError:
     # Handle case when running from different directory
     sys.path.insert(0, str(Path(__file__).parent))
     from config_loader import load_config, load_service_monitoring, validate_config
+
+
+# ===== Update accessors =====
+#
+# Telegram models message, user and callback query as optional on Update,
+# because a single Update object covers every kind of event. The handlers
+# below are registered for commands and callback queries only, so the
+# attribute they need is always present at runtime - but the type cannot say
+# so. These accessors turn "impossible" into a loud failure instead of an
+# AttributeError deep inside a handler.
+
+BotApplication = Application[Any, Any, Any, Any, Any, Any]
+
+
+def require_message(update: Update) -> Message:
+    """Return the message this update carries."""
+    if update.message is None:
+        raise RuntimeError("handler received an update without a message")
+    return update.message
+
+
+def require_user(update: Update) -> User:
+    """Return the user this update originated from."""
+    if update.effective_user is None:
+        raise RuntimeError("handler received an update without a user")
+    return update.effective_user
+
+
+def require_query(update: Update) -> CallbackQuery:
+    """Return the callback query this update carries."""
+    if update.callback_query is None:
+        raise RuntimeError("handler received an update without a callback query")
+    return update.callback_query
+
+
+def require_updater(application: BotApplication) -> Updater:
+    """Return the polling updater of an application built for long polling."""
+    if application.updater is None:
+        raise RuntimeError("application was built without an updater")
+    return application.updater
 
 
 # ===== Configuration =====
@@ -381,7 +430,7 @@ class AlertManager:
 
     def __init__(self, bot_config: BotConfig) -> None:
         self.config = bot_config
-        self.alert_queue: deque = deque(maxlen=100)
+        self.alert_queue: deque[dict[str, Any]] = deque(maxlen=100)
         self.last_alerts: dict[str, datetime] = {}
 
     def should_send_alert(self, alert_type: str) -> bool:
@@ -425,7 +474,7 @@ class InteractiveBot:
         self.config = BotConfig()
         self.monitor = SystemMonitor()
         self.alerts = AlertManager(self.config)
-        self.application: Application | None = None
+        self.application: BotApplication | None = None
         self.admin_sessions: dict[str, Any] = {}
 
     async def start_command(
@@ -444,7 +493,9 @@ class InteractiveBot:
             "/restart - Restart a service (admin)\n"
             "/help - Show all commands\n"
         )
-        await update.message.reply_text(welcome_msg, parse_mode=ParseMode.MARKDOWN)
+        await require_message(update).reply_text(
+            welcome_msg, parse_mode=ParseMode.MARKDOWN
+        )
 
     async def status_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -453,7 +504,7 @@ class InteractiveBot:
         status = self.monitor.get_system_status()
 
         if not status.get("healthy", True):
-            await update.message.reply_text(
+            await require_message(update).reply_text(
                 "⚠️ System status degraded - partial data available"
             )
 
@@ -478,7 +529,7 @@ class InteractiveBot:
             msg += f"  • {iface}: `{ip}`\n"
 
         msg += f"\n_Updated: {datetime.now(timezone.utc).strftime('%H:%M:%S')}_"
-        await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+        await require_message(update).reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
     async def services_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -502,7 +553,7 @@ class InteractiveBot:
                 msg += f"  {emoji} {container['name']}\n"
 
         msg += f"\n_Updated: {datetime.now(timezone.utc).strftime('%H:%M:%S')}_"
-        await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+        await require_message(update).reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
     async def metrics_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -536,21 +587,23 @@ class InteractiveBot:
         msg += f"🌡️ *Temp:* {temp_emoji} {temp:.1f}°C\n"
 
         msg += f"\n_Updated: {datetime.now(timezone.utc).strftime('%H:%M:%S')}_"
-        await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+        await require_message(update).reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
     async def restart_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """Handle /restart command (admin only)."""
-        user_id = str(update.effective_user.id)
+        user_id = str(require_user(update).id)
 
         if user_id not in self.config.admin_ids:
-            await update.message.reply_text("❌ Unauthorized: Admin access required")
+            await require_message(update).reply_text(
+                "❌ Unauthorized: Admin access required"
+            )
             return
 
         if not context.args:
             allowed_preview = ALLOWED_SERVICES[:5]
-            await update.message.reply_text(
+            await require_message(update).reply_text(
                 "Usage: `/restart <service>`\n"
                 "Example: `/restart nginx`\n\n"
                 f"Allowed services: {', '.join(allowed_preview)}...",
@@ -562,7 +615,7 @@ class InteractiveBot:
 
         # Security: Whitelist validation
         if service_name not in ALLOWED_SERVICES:
-            await update.message.reply_text(
+            await require_message(update).reply_text(
                 f"❌ *Service not allowed*\n\n"
                 f"Service '{service_name}' is not in the allowed list.\n\n"
                 f"Allowed services:\n"
@@ -582,7 +635,7 @@ class InteractiveBot:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await update.message.reply_text(
+        await require_message(update).reply_text(
             f"⚠️ *Confirm Service Restart*\n\n"
             f"Service: `{service_name}`\n\n"
             f"Are you sure you want to restart this service?",
@@ -594,10 +647,10 @@ class InteractiveBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """Handle restart confirmation callback."""
-        query = update.callback_query
+        query = require_query(update)
         await query.answer()
 
-        data = query.data
+        data = query.data or ""
 
         if data == "restart_cancel":
             await query.edit_message_text("❌ Restart cancelled")
@@ -679,7 +732,7 @@ class InteractiveBot:
 
         # Security: Validate service name to prevent command injection
         if service and not SERVICE_NAME_PATTERN.match(service):
-            await update.message.reply_text(
+            await require_message(update).reply_text(
                 "❌ Invalid service name. Use only letters, numbers, "
                 "underscores, hyphens, dots, and @."
             )
@@ -726,21 +779,23 @@ class InteractiveBot:
                     msg += " *(Warnings & Errors)*\n"
                 msg += f"_Last {len(log_lines)} entries:_\n\n"
                 msg += "```\n" + "\n".join(log_lines[-10:]) + "\n```"
-                await update.message.reply_text(
+                await require_message(update).reply_text(
                     msg[:4000], parse_mode=ParseMode.MARKDOWN
                 )
             else:
-                await update.message.reply_text("No logs found")
+                await require_message(update).reply_text("No logs found")
 
         except (subprocess.SubprocessError, OSError) as e:
             logger.error(f"Logs retrieval failed: {e}")
-            await update.message.reply_text(f"❌ Error retrieving logs: {str(e)}")
+            await require_message(update).reply_text(
+                f"❌ Error retrieving logs: {str(e)}"
+            )
 
     async def help_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """Handle /help command."""
-        user_id = str(update.effective_user.id)
+        user_id = str(require_user(update).id)
         is_admin = user_id in self.config.admin_ids
 
         msg = f"*{self.config.system_name} Bot Commands*\n\n"
@@ -759,7 +814,7 @@ class InteractiveBot:
         msg += "`/help` (`/h`) - Show this message\n\n"
         msg += "_💡 Tip: Use short aliases for faster access!_\n"
 
-        await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+        await require_message(update).reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
     async def send_alert(
         self, level: str, message: str, details: dict[str, Any] | None = None
@@ -844,7 +899,7 @@ class InteractiveBot:
         # Start polling
         await self.application.initialize()
         await self.application.start()
-        await self.application.updater.start_polling(drop_pending_updates=True)
+        await require_updater(self.application).start_polling(drop_pending_updates=True)
 
         logger.info("Bot started successfully")
 
@@ -856,7 +911,7 @@ class InteractiveBot:
             await self.send_alert(
                 "INFO", "Bot Stopping", {"Reason": "Service shutdown"}
             )
-            await self.application.updater.stop()
+            await require_updater(self.application).stop()
             await self.application.stop()
             await self.application.shutdown()
 
@@ -880,7 +935,7 @@ def main() -> int:
     bot = InteractiveBot()
 
     # Signal handlers
-    def signal_handler(sig, frame):
+    def signal_handler(sig: int, frame: FrameType | None) -> None:
         logger.info(f"Signal {sig} received")
         try:
             loop = asyncio.get_event_loop()
