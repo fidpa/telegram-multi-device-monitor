@@ -1,0 +1,50 @@
+---
+name: Release
+
+"on":
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract changelog section
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          HEADING="## [${VERSION}]"
+
+          awk -v head="$HEADING" '
+            index($0, head) == 1 { p=1; next }
+            /^## / { if (p) exit }
+            p { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' > release-notes.md
+          test -s release-notes.md || {
+            echo "Empty release notes for $VERSION"; exit 1; }
+
+          HEADLINE=$(awk -v head="$HEADING" '
+            index($0, head) == 1 {
+              if (match($0, /- [0-9]{4}-[0-9]{2}-[0-9]{2}: /)) {
+                print substr($0, RSTART + RLENGTH); exit
+              }
+            }
+          ' CHANGELOG.md)
+          if [ -n "$HEADLINE" ]; then
+            echo "title=v${VERSION}: ${HEADLINE}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No headline in the heading for ${VERSION}"
+            echo "title=v${VERSION}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.changelog.outputs.title }}
+          body_path: release-notes.md
