@@ -33,8 +33,6 @@ import subprocess
 import sys
 import time
 from collections import deque
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -155,7 +153,6 @@ class BotConfig:
         "quiet_hours",
         "batch_window",
         "memory_limit_mb",
-        "ssh_max_connections",
     ]
 
     def __init__(self) -> None:
@@ -201,9 +198,6 @@ class BotConfig:
 
         # Memory limits
         self.memory_limit_mb = memory_config.get("limit_mb", 50)
-
-        # SSH connection pool
-        self.ssh_max_connections = CONFIG.get("ssh", {}).get("max_connections", 3)
 
 
 class MemoryManager:
@@ -281,31 +275,6 @@ class AlertBatcher:
         return batched
 
 
-class SSHConnectionPool:
-    """Manages SSH connections with pooling for resource efficiency."""
-
-    __slots__ = ["_connections", "_max_connections", "_lock"]
-
-    def __init__(self, max_connections: int = 3) -> None:
-        self._connections: list[str] = []
-        self._max_connections = max_connections
-        self._lock = asyncio.Lock()
-
-    @asynccontextmanager
-    async def get_connection(self, host: str) -> AsyncGenerator[str, None]:
-        """Get SSH connection from pool."""
-        async with self._lock:
-            while len(self._connections) >= self._max_connections:
-                await asyncio.sleep(0.1)
-            self._connections.append(host)
-
-        try:
-            yield host
-        finally:
-            async with self._lock:
-                self._connections.remove(host)
-
-
 class TelegramAlertBot:
     """Lightweight alert bot with AsyncIO optimization."""
 
@@ -313,7 +282,6 @@ class TelegramAlertBot:
         self.config = config
         self.memory_manager = MemoryManager()
         self.alert_batcher = AlertBatcher(config.batch_window)
-        self.ssh_pool = SSHConnectionPool(config.ssh_max_connections)
         self.application: BotApplication | None = None
 
         # 2FA tracking

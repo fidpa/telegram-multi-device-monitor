@@ -9,11 +9,11 @@
 
 Production-ready Telegram bot framework for multi-device system monitoring. Monitor servers, Raspberry Pis, NAS devices, and more through Telegram with alerts, metrics, and remote management.
 
-**The Problem**: Managing multiple Linux devices means SSH-ing into each one separately to check status, restart services, or investigate alerts. From a phone with a small keyboard and unreliable mobile connection, this becomes impractical. After months of running this on a Pi 5 router, a NAS server, and a fleet of Pi Zeros, I've extracted the monitoring stack into a reusable framework with 5 independently deployable components — from a full-featured 50MB interactive bot down to a 25MB alert bot that fits on a Pi Zero with 512MB RAM.
+**The Problem**: Managing multiple Linux devices means SSH-ing into each one separately to check status, restart services, or investigate alerts. From a phone with a small keyboard and unreliable mobile connection, this becomes impractical. After months of running this on a Pi 5 router, a NAS server, and a fleet of Pi Zeros, I've extracted the monitoring stack into a reusable framework with seven components under `src/`, five of them deployable on their own (four systemd units plus the CLI sender) — from a full-featured 50MB interactive bot down to a 25MB alert bot that fits on a Pi Zero with 512MB RAM.
 
 ## Features
 
-- **Interactive Bot** — Full monitoring with 15+ commands (`/status`, `/services`, `/docker`, `/metrics`, `/logs`, `/restart`)
+- **Interactive Bot** — Full monitoring with eight commands: `/status`, `/services`, `/docker`, `/metrics`, `/logs`, `/restart` and `/help` each carry a single-letter alias, `/start` does not
 - **Alert Bot** — Lightweight variant for devices with 512MB RAM (~25MB footprint, `__slots__` optimized)
 - **Prometheus Webhook** — Alertmanager integration with deduplication and customizable templates
 - **SSH-Based Collection** — Agent-less remote monitoring (no software installation on target devices)
@@ -102,7 +102,7 @@ sudo ./install.sh --uninstall
 
 ### Design Decisions
 
-**Why 5 components instead of 1 monolith?** A Pi Zero with 512MB RAM cannot run a 50MB bot alongside its primary workload. The alert bot (~25MB) handles the common case. The interactive bot runs on the server where resources are available. The Prometheus webhook integrates with existing monitoring stacks. Each component is independently deployable — you pick what you need.
+**Why several components instead of 1 monolith?** A Pi Zero with 512MB RAM cannot run a 50MB bot alongside its primary workload. The alert bot (~25MB) handles the common case. The interactive bot runs on the server where resources are available. The Prometheus webhook integrates with existing monitoring stacks. Each component is independently deployable — you pick what you need.
 
 **Why Python + Bash?** Python for the bots (async I/O, Telegram library, psutil for metrics). Bash for the CLI sender and libraries (zero dependencies, runs in cron jobs and scripts without a Python runtime). The YAML config loader bridges both worlds.
 
@@ -114,7 +114,7 @@ sudo ./install.sh --uninstall
 
 | Component | File | Purpose | RAM | Use Case |
 |-----------|------|---------|-----|----------|
-| **Interactive Bot** | `interactive_bot.py` | Full monitoring with 15+ commands | ~50MB | Servers, workstations |
+| **Interactive Bot** | `interactive_bot.py` | Full monitoring with eight commands | ~50MB | Servers, workstations |
 | **Alert Bot** | `alert_bot.py` | Lightweight alert processing | ~25MB | Raspberry Pi Zero, constrained devices |
 | **Prometheus Webhook** | `prometheus_webhook.py` | Alertmanager receiver | ~30MB | Existing Prometheus stacks |
 | **Metrics Collector** | `metrics_collector.py` | Local + SSH metric collection | ~15MB | Agent-less remote monitoring |
@@ -201,7 +201,7 @@ See [docs/SETUP.md](docs/SETUP.md) for all configuration options.
 | **Grafana OnCall** | Enterprise-grade, escalation | Complex setup, overkill for homelab |
 | **Healthchecks.io** | Simple cron monitoring | No system metrics, no interactive commands |
 | **Netdata** | Deep metrics, auto-discovery | Heavy (300MB+), no Telegram interaction |
-| **This project** | Interactive commands, low-memory, 5 components | No web UI, Linux-only |
+| **This project** | Interactive commands, low-memory, seven components | No web UI, Linux-only |
 
 ## Security
 
@@ -327,7 +327,7 @@ MIT License — see [LICENSE](LICENSE)
 
 Marc Allgeier ([@fidpa](https://github.com/fidpa))
 
-**Why I Built This**: I run a Pi 5 as a network gateway, a NAS with 38 Docker containers, and 5 Pi Zeros for monitoring tasks. Checking each device meant SSH-ing in separately — impractical from a phone. I needed something that lets me type `/status` in Telegram and see all devices at a glance, with alerts that don't flood my chat. The 5-component architecture emerged from a real constraint: the Pi Zeros have 512MB RAM and can't run a full monitoring bot. So I built a 25MB alert bot for constrained devices and a full-featured interactive bot for the server.
+**Why I Built This**: I run a Pi 5 as a network gateway, a NAS with 38 Docker containers, and 5 Pi Zeros for monitoring tasks. Checking each device meant SSH-ing in separately — impractical from a phone. I needed something that lets me type `/status` in Telegram and see all devices at a glance, with alerts that don't flood my chat. The multi-component architecture emerged from a real constraint: the Pi Zeros have 512MB RAM and can't run a full monitoring bot. So I built a 25MB alert bot for constrained devices and a full-featured interactive bot for the server.
 
 ## See Also
 

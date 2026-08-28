@@ -67,13 +67,3 @@ targets:
   #     - "docker"
   #     - "smbd"
   #     - "nextcloud"
-
-# =============================================================================
-# Connection Pool Settings
-# =============================================================================
-pool:
-  # Maximum concurrent SSH connections
-  max_connections: 3
-
-  # Connection keep-alive interval (seconds)
-  keepalive_interval: 30

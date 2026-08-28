@@ -65,7 +65,7 @@ System design and component overview for telegram-multi-device-monitor.
 The main, full-featured bot with extensive monitoring capabilities.
 
 **Features:**
-- 15+ Telegram commands
+- Eight Telegram commands
 - Service management (view, restart)
 - Docker container monitoring
 - Network interface monitoring
@@ -90,7 +90,6 @@ Lightweight alternative for resource-constrained devices.
 - AsyncIO optimized
 - Memory management with GC
 - 2FA for admin commands
-- Connection pooling
 
 **Memory Usage:** ~25MB
 

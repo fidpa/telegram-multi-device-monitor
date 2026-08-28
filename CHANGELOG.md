@@ -5,6 +5,57 @@ All notable changes to telegram-multi-device-monitor will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-08-28: A configuration key that never reached any code is gone
+
+`pool.max_connections` and `pool.keepalive_interval` were documented as SSH
+tuning knobs in `config/ssh_targets.yml.example` and `docs/API_REFERENCE.md`.
+Neither was ever read. The class they were meant to configure,
+`SSHConnectionPool` in `alert_bot.py`, was constructed and never used, and the
+one line that did read a value took it from `telegram_config.yml`, which has no
+`ssh` section: the result was the hardcoded default `3` regardless of what the
+operator set. This release removes the whole construct rather than leaving a
+setting that answers nothing.
+
+### Removed
+
+- **The `pool` section of `config/ssh_targets.yml` is gone.** It held
+  `max_connections` and `keepalive_interval`; no code path read either.
+  A configuration file that still contains the section keeps working:
+  `load_ssh_targets()` in `config_loader.py` returns `data.get("targets", [])`
+  and never looks at the rest of the file.
+- **`SSHConnectionPool` and `BotConfig.ssh_max_connections` are removed from
+  `alert_bot.py`.** The class had no caller, and `alert_bot.py` opens no SSH
+  connection of its own. Remote monitoring is `metrics_collector.py`, which runs
+  `ssh` per call and never touched the pool. With them go the now-unused
+  `AsyncGenerator` and `asynccontextmanager` imports.
+
+### Changed
+
+- **The interactive bot is documented with the eight commands it answers.**
+  `README.md` and `docs/ARCHITECTURE.md` said "15+", which counted the
+  `CommandHandler` registrations in `interactive_bot.py`; seven of those are
+  single-letter aliases. `/status`, `/services`, `/docker`, `/metrics`, `/logs`,
+  `/restart` and `/help` carry one, `/start` does not.
+- **`README.md` names seven components instead of five.** `src/` holds seven:
+  `interactive_bot.py`, `alert_bot.py`, `prometheus_webhook.py`,
+  `simple_sender.sh`, `token_fetcher.sh`, `alert_sender.py` and
+  `metrics_collector.py`. Five of them are deployable on their own, which is the
+  number the text had been using for all of them: four systemd units under
+  `systemd/` plus the CLI sender.
+- **`docs/ARCHITECTURE.md` no longer lists connection pooling** among the alert
+  bot's features.
+
+### Upgrade notes
+
+- **Nothing to change on a running installation.** The removed keys had no
+  effect, so no behaviour changes with this release. If your
+  `ssh_targets.yml` carries a `pool:` section, you may delete it; leaving it in
+  place is harmless.
+- **If you were relying on `pool.max_connections` to limit concurrent SSH
+  connections, it was not doing that.** `metrics_collector.py` has no
+  concurrency to limit: `collect_all_metrics()` calls `ssh_command()` one target
+  after another, with no `asyncio.gather` and no thread pool.
+
 ## [1.0.3] - 2026-08-28: Release notes match the tags they are published under
 
 Every section in this file was read against the tag it describes and corrected
@@ -248,6 +299,7 @@ come from that deployment; no benchmark ships with this repository.
 
 ## Version History
 
+[1.1.0]: https://github.com/fidpa/telegram-multi-device-monitor/releases/tag/v1.1.0
 [1.0.3]: https://github.com/fidpa/telegram-multi-device-monitor/releases/tag/v1.0.3
 [1.0.2]: https://github.com/fidpa/telegram-multi-device-monitor/releases/tag/v1.0.2
 [1.0.1]: https://github.com/fidpa/telegram-multi-device-monitor/releases/tag/v1.0.1

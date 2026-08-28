@@ -222,11 +222,6 @@ targets:
     services:
       - smbd
       - docker
-
-# Connection pool
-pool:
-  max_connections: 3
-  keepalive_interval: 30
 ```
 
 ### Network Configuration
