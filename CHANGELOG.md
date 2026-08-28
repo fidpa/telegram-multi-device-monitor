@@ -5,6 +5,26 @@ All notable changes to telegram-multi-device-monitor will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-08-28: The installer reports the version it ships with, and GitHub reads the licence
+
+### Fixed
+
+- **`install.sh` reports the version it actually ships with.** The `VERSION`
+  file is the single source `resolve_version()` reads, and it still held
+  `1.0.2` while the repository was tagged `v1.1.0`. Anyone installing v1.1.0
+  saw `telegram-multi-device-monitor Installer v1.0.2` (`install.sh:386`), and
+  a deployed tree carried the same wrong number in `${INSTALL_DIR}/VERSION`.
+  Two releases had left the file behind; it now tracks the tag.
+
+### Changed
+
+- **The repository page shows the MIT licence, and licence-filtered searches
+  find the project.** `LICENSE` carried the repository URL on its own line
+  under the copyright notice. GitHub reads a licence text with an extra line as
+  modified and reports `NOASSERTION`, which leaves the licence field on the
+  repository page empty. The line is gone; the MIT text and the copyright
+  notice are byte-for-byte unchanged, and the URL is still in `README.md`.
+
 ## [1.1.0] - 2026-08-28: A configuration key that never reached any code is gone
 
 `pool.max_connections` and `pool.keepalive_interval` were documented as SSH
@@ -299,6 +319,7 @@ come from that deployment; no benchmark ships with this repository.
 
 ## Version History
 
+[1.1.1]: https://github.com/fidpa/telegram-multi-device-monitor/releases/tag/v1.1.1
 [1.1.0]: https://github.com/fidpa/telegram-multi-device-monitor/releases/tag/v1.1.0
 [1.0.3]: https://github.com/fidpa/telegram-multi-device-monitor/releases/tag/v1.0.3
 [1.0.2]: https://github.com/fidpa/telegram-multi-device-monitor/releases/tag/v1.0.2
