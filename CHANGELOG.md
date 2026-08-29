@@ -5,6 +5,53 @@ All notable changes to telegram-multi-device-monitor will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-08-30: The README, the command reference and the security policy say what the code does
+
+### Changed
+
+- **The README says what the code does.** A pass against
+  `docs/conventions/README_QUALITY_STANDARDS.md` corrected the claims that did
+  not hold: the command table listed a `/memory` command that has no handler and
+  omitted the aliases `/v`, `/d`, `/m`, `/l`, `/r` that `/help` prints; `/docker`
+  is wired to `services_command`, so it shows the same view as `/services` and
+  now says so. The configuration example showed a `security:` block with
+  `restart_whitelist` and `enable_2fa`, neither of which exists in
+  `config_loader.py` or `telegram_config.yml.example`: the restart whitelist is
+  `allowed_restart` in `service_monitoring.yml`, and 2FA lives in `alert_bot.py`
+  alone, which the feature list, the security table, and the limitations box now
+  state. The security table gained its source file per layer and lost two wrong
+  entries: the installer creates directories as `chmod 750`, not config files as
+  `chmod 600`, and input handling is a systemd name pattern plus `shlex.quote`,
+  not sanitizing "all user-facing inputs". The alert-state paragraph named
+  `/var/lib/telegram-monitor` as if it were the default; the Bash library uses
+  `$XDG_STATE_HOME/telegram-monitor` and the webhook falls back to
+  `/tmp/prometheus-webhook` unless its systemd unit sets `STATE_DIR`.
+  `token_fetcher.sh` was in the tree but not in the component table, which makes
+  eight components, not seven. The installer section quotes `install.sh --help`
+  verbatim instead of paraphrasing it. Per-file line counts, the footer totals,
+  and the `Lines` column of the Bash library table are gone: they were stale in
+  eight of nine places and belong to a command, not to prose. The RAM figures
+  are now labelled as resident-set observations rather than measurements, and
+  `requests` and the commented-out `paramiko` joined the dependency list. The
+  language pass removed the `**The Problem**:` template, the "Production-ready"
+  and "Security Hardened" labels, the "Transparent documentation of trade-offs"
+  preamble, the duplicated origin story in the author section, and all 28 em
+  dashes.
+- **The command reference covers the alert bot too.** `docs/API_REFERENCE.md`
+  documented the interactive bot only. `/memory` and `/auth` exist in
+  `alert_bot.py` and were reachable but undocumented, while `docs/EXAMPLES.md`
+  used `/memory` without saying which bot answers it. The reference now has an
+  *Alert Bot Commands* section for the five handlers that bot registers, and the
+  README points at it rather than repeating the list.
+
+### Fixed
+
+- **`SECURITY.md` supports the version that is shipping.** The supported-versions
+  table still listed `1.0.x` alone, three releases after 1.1.0. A reporter
+  reading it would have concluded that the current release receives no security
+  fixes. `1.1.x` is now the supported line and `1.0.x` is marked as no longer
+  supported.
+
 ## [1.1.1] - 2026-08-28: The installer reports the version it ships with, and GitHub reads the licence
 
 ### Fixed
@@ -319,6 +366,7 @@ come from that deployment; no benchmark ships with this repository.
 
 ## Version History
 
+[1.1.2]: https://github.com/fidpa/telegram-multi-device-monitor/releases/tag/v1.1.2
 [1.1.1]: https://github.com/fidpa/telegram-multi-device-monitor/releases/tag/v1.1.1
 [1.1.0]: https://github.com/fidpa/telegram-multi-device-monitor/releases/tag/v1.1.0
 [1.0.3]: https://github.com/fidpa/telegram-multi-device-monitor/releases/tag/v1.0.3

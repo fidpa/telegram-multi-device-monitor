@@ -7,28 +7,53 @@
 [![CI](https://github.com/fidpa/telegram-multi-device-monitor/actions/workflows/lint.yml/badge.svg)](https://github.com/fidpa/telegram-multi-device-monitor/actions)
 ![Last Commit](https://img.shields.io/github/last-commit/fidpa/telegram-multi-device-monitor)
 
-Production-ready Telegram bot framework for multi-device system monitoring. Monitor servers, Raspberry Pis, NAS devices, and more through Telegram with alerts, metrics, and remote management.
+A Telegram bot framework for monitoring several Linux devices: servers, Raspberry
+Pis, NAS boxes. It sends alerts, reports metrics, and restarts whitelisted
+services from a chat window.
 
-**The Problem**: Managing multiple Linux devices means SSH-ing into each one separately to check status, restart services, or investigate alerts. From a phone with a small keyboard and unreliable mobile connection, this becomes impractical. After months of running this on a Pi 5 router, a NAS server, and a fleet of Pi Zeros, I've extracted the monitoring stack into a reusable framework with seven components under `src/`, five of them deployable on their own (four systemd units plus the CLI sender) — from a full-featured 50MB interactive bot down to a 25MB alert bot that fits on a Pi Zero with 512MB RAM.
+Checking a handful of devices means opening an SSH session per device, which is
+awkward from a phone on a mobile connection. This repository is the monitoring
+stack I run on a Pi 5 router, a NAS, and a few Pi Zeros, extracted into eight
+components under `src/`. Four of them ship a systemd unit, one is a plain CLI
+sender for cron jobs, and the split exists because a Pi Zero with 512MB RAM
+cannot host the full interactive bot next to its actual workload.
 
 ## Features
 
-- **Interactive Bot** — Full monitoring with eight commands: `/status`, `/services`, `/docker`, `/metrics`, `/logs`, `/restart` and `/help` each carry a single-letter alias, `/start` does not
-- **Alert Bot** — Lightweight variant for devices with 512MB RAM (~25MB footprint, `__slots__` optimized)
-- **Prometheus Webhook** — Alertmanager integration with deduplication and customizable templates
-- **SSH-Based Collection** — Agent-less remote monitoring (no software installation on target devices)
-- **Alert Deduplication** — Rate limiting and state persistence across restarts to prevent alert fatigue
-- **Security Hardened** — Admin whitelist, optional 2FA, service restart whitelist, systemd sandboxing
-- **YAML Configuration** — Centralized config with environment variable overrides and validation
+- **Interactive bot** with eight commands: `/start`, `/status`, `/services`,
+  `/docker`, `/metrics`, `/logs`, `/restart`, `/help`. All but `/start` carry a
+  single-letter alias
+- **Alert bot** for low-memory devices: `__slots__` on the config, GC, and
+  batching classes, plus a `MemoryMax=50M` systemd unit
+- **Prometheus webhook**: an Alertmanager receiver with fingerprint-based
+  deduplication and a message template per alertname (`ServiceDown`, `HighCPU`,
+  `HighMemory`, and a default)
+- **SSH-based collection**: remote metrics over `ssh` with key auth, no agent
+  installed on the target device
+- **Alert deduplication**: a dedup window plus a per-hour rate limit, both backed
+  by a JSON state file that survives a restart
+- **Access control**: admin IDs for privileged commands, a restart whitelist read
+  from `service_monitoring.yml`, and systemd sandboxing in every unit
+- **YAML configuration** with environment variable overrides and startup
+  validation
 
 ## Known Limitations
 
-> **Transparent documentation of trade-offs**:
->
-> - SSH remote monitoring uses `StrictHostKeyChecking=accept-new` (Trust On First Use) — secure enough for homelabs, but not for zero-trust environments. Use `StrictHostKeyChecking=yes` with pre-distributed keys for higher security.
-> - Alert state is file-based (JSON). For high-volume environments (>100 alerts/hour), consider a proper database.
-> - The interactive bot polls Telegram (long polling). For webhook-based deployments behind a reverse proxy, additional configuration is needed.
-> - 2FA is optional and token-based. It is not a replacement for SSH key-based authentication on the target devices.
+> - SSH remote monitoring uses `StrictHostKeyChecking=accept-new` (trust on first
+>   use). That is fine for a homelab, not for a zero-trust network. Set
+>   `StrictHostKeyChecking=yes` with pre-distributed host keys if you need more.
+> - Two-factor auth for `/restart` exists in the alert bot only. The interactive
+>   bot checks the admin ID and the service whitelist, and nothing else.
+> - Alert state is a JSON file. Above roughly 100 alerts per hour a real database
+>   would be the better fit.
+> - The webhook writes its dedup state to `/tmp/prometheus-webhook` unless
+>   `STATE_DIR` says otherwise. The shipped systemd unit points it at
+>   `/var/lib/telegram-monitor`; a manual start does not.
+> - The interactive bot uses long polling. Webhook mode behind a reverse proxy is
+>   not wired up in this repository.
+> - The RAM figures below are rough resident-set observations from my own
+>   devices (Raspberry Pi OS and Ubuntu, CPython 3.11), not a benchmark. Treat
+>   them as an order of magnitude.
 
 ## Quick Start
 
@@ -37,7 +62,7 @@ Production-ready Telegram bot framework for multi-device system monitoring. Moni
 - Python 3.10+
 - Bash 5.0+
 - Telegram bot token from [@BotFather](https://t.me/BotFather)
-- Optional: `jq`, `curl` (for Bash components)
+- Optional: `jq`, `curl` (for the Bash components)
 
 ### Setup
 
@@ -52,24 +77,37 @@ pip3 install -r requirements.txt
 # Configure
 cp config/telegram_config.yml.example config/telegram_config.yml
 # Edit with your bot token, chat ID, and admin IDs
+chmod 600 config/telegram_config.yml
 
 # Run the interactive bot
 python3 src/interactive_bot.py
 
-# Or the lightweight alert bot (for Pi Zero / low-memory devices)
+# Or the lightweight alert bot (for Pi Zero and other low-memory devices)
 python3 src/alert_bot.py
 ```
 
 ### Automated Installation
 
+`install.sh --help`, quoted:
+
+```
+Usage: ./install.sh [OPTION]
+
+Options:
+    (no option)     Interactive installation
+    --check         Check dependencies only
+    --uninstall     Remove installation
+    --help          Show this help
+```
+
+The interactive run creates the `telegram-monitor` service user, the config, log,
+and state directories under `/etc`, `/var/log`, and `/var/lib`, copies `src/` to
+`/opt/telegram-monitor`, and installs the systemd units. Those paths and the user
+name are constants in the script, not options.
+
 ```bash
-# Interactive installer (creates user, config dirs, systemd services)
-sudo ./install.sh
-
-# Verify dependencies only
-./install.sh --check
-
-# Uninstall
+sudo ./install.sh          # full installation
+./install.sh --check       # dependencies only, no changes
 sudo ./install.sh --uninstall
 ```
 
@@ -102,119 +140,142 @@ sudo ./install.sh --uninstall
 
 ### Design Decisions
 
-**Why several components instead of 1 monolith?** A Pi Zero with 512MB RAM cannot run a 50MB bot alongside its primary workload. The alert bot (~25MB) handles the common case. The interactive bot runs on the server where resources are available. The Prometheus webhook integrates with existing monitoring stacks. Each component is independently deployable — you pick what you need.
+**Why several components instead of one binary?** A Pi Zero with 512MB RAM cannot
+run the interactive bot next to its primary workload, so the alert bot covers the
+common case there and the interactive bot runs on the server. The webhook exists
+for hosts that already have Alertmanager. Each component starts on its own; you
+deploy the ones you need.
 
-**Why Python + Bash?** Python for the bots (async I/O, Telegram library, psutil for metrics). Bash for the CLI sender and libraries (zero dependencies, runs in cron jobs and scripts without a Python runtime). The YAML config loader bridges both worlds.
+**Why Python and Bash?** The bots need async I/O, the Telegram library, and
+psutil, so they are Python. The CLI sender and the three libraries under
+`src/lib/` are Bash, which lets a cron job or a backup script send a message
+without a Python runtime. `config_loader.py` and the YAML files are what the two
+halves share.
 
-**Why long polling instead of webhooks?** Long polling works behind NAT without a public IP or reverse proxy. Most homelab setups don't expose services to the internet. Webhook mode can be configured for environments that need it.
+**Why long polling instead of webhooks?** Long polling works behind NAT without a
+public IP or a reverse proxy, which is what most homelab setups have.
 
-**Why file-based alert state?** SQLite or Redis would add dependencies and complexity. A JSON file in `/var/lib/telegram-monitor/` survives reboots (StateDirectory, not RuntimeDirectory) and is sufficient for <100 alerts/hour.
+**Why file-based alert state?** SQLite or Redis would add a dependency for a
+handful of timestamps. The Bash library writes to
+`$XDG_STATE_HOME/telegram-monitor` (`~/.local/state/telegram-monitor` by
+default), and the webhook writes to `$STATE_DIR`, which its systemd unit sets to
+`/var/lib/telegram-monitor` with `StateDirectory=`, so the state outlives a
+reboot.
 
 ## Components
+
+RAM figures are resident-set observations, see Known Limitations above.
 
 | Component | File | Purpose | RAM | Use Case |
 |-----------|------|---------|-----|----------|
 | **Interactive Bot** | `interactive_bot.py` | Full monitoring with eight commands | ~50MB | Servers, workstations |
-| **Alert Bot** | `alert_bot.py` | Lightweight alert processing | ~25MB | Raspberry Pi Zero, constrained devices |
-| **Prometheus Webhook** | `prometheus_webhook.py` | Alertmanager receiver | ~30MB | Existing Prometheus stacks |
-| **Metrics Collector** | `metrics_collector.py` | Local + SSH metric collection | ~15MB | Agent-less remote monitoring |
+| **Alert Bot** | `alert_bot.py` | Alert processing plus `/restart` with 2FA | ~25MB | Raspberry Pi Zero, constrained devices |
+| **Prometheus Webhook** | `prometheus_webhook.py` | Alertmanager receiver (Flask) | ~30MB | Existing Prometheus stacks |
+| **Metrics Collector** | `metrics_collector.py` | Local and SSH metric collection | ~15MB | Agent-less remote monitoring |
 | **Simple Sender** | `simple_sender.sh` | CLI message sender | Minimal | Cron jobs, scripts, one-liners |
 | **Alert Sender** | `alert_sender.py` | Pre-formatted status messages | ~15MB | Scheduled system reports |
+| **Token Fetcher** | `token_fetcher.sh` | `ExecStartPre` hook that pulls the token from a secret manager into the runtime dir | Minimal | Hosts that keep the token out of `/etc` |
 | **Config Loader** | `config_loader.py` | YAML config with env overrides | Library | Used by all Python components |
 
 ### Bash Libraries
 
-| Library | Lines | Purpose |
-|---------|-------|---------|
-| `lib/alerts.sh` | 266 | Alert deduplication and rate limiting with state persistence |
-| `lib/file_utils.sh` | 261 | Atomic file operations, safe path handling, temp file management |
-| `lib/logging.sh` | 206 | Structured logging with configurable targets and levels |
+| Library | Purpose |
+|---------|---------|
+| `lib/alerts.sh` | Alert deduplication and rate limiting with state persistence |
+| `lib/file_utils.sh` | Atomic file operations, safe path handling, temp file management |
+| `lib/logging.sh` | Structured logging with configurable targets and levels |
 
 ## Command Quick Reference
+
+Interactive bot. The aliases below are the ones `/help` prints; `/start` has none:
 
 | Command | Description | Access |
 |---------|-------------|--------|
 | `/status` (`/s`) | System overview (CPU, RAM, disk, temp) | All |
-| `/services` | systemd service health check | All |
-| `/docker` | Docker container status | All |
-| `/metrics` | Performance with visual bars | All |
-| `/logs [n] [svc]` | View recent service logs | All |
-| `/restart <svc>` | Restart service (with confirmation) | Admin |
-| `/memory` | Bot memory usage | All |
-| `/help` | Show all commands | All |
+| `/services` (`/v`) | systemd services and Docker containers | All |
+| `/docker` (`/d`) | Same handler as `/services`, kept as a habit alias | All |
+| `/metrics` (`/m`) | Performance with visual bars | All |
+| `/logs` (`/l`) `[lines] [service]` | View recent service logs | All |
+| `/restart` (`/r`) `<service>` | Restart a whitelisted service, with a confirmation button | Admin |
+| `/help` (`/h`) | Show all commands | All |
+| `/start` | Welcome message | All |
 
-Full command reference: [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
+The alert bot answers a smaller set and without aliases: `/start`, `/status`,
+`/restart`, `/auth` (the 2FA code), and `/memory`.
+
+Full command reference for both bots: [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
 
 ## Configuration
 
-Configuration files are in YAML format with environment variable overrides:
+YAML files with environment variable overrides, excerpt from
+`config/telegram_config.yml.example`:
 
 ```yaml
-# config/telegram_config.yml
 bot:
   system_name: "My Server"
   system_prefix: "[SERVER]"
   log_level: "INFO"
 
 telegram:
-  token: "YOUR_BOT_TOKEN"       # or env: TELEGRAM_BOT_TOKEN
-  chat_id: "YOUR_CHAT_ID"       # or env: TELEGRAM_CHAT_ID
-  admin_ids:
+  token: "YOUR_BOT_TOKEN_HERE"    # or env: TELEGRAM_BOT_TOKEN
+  chat_id: "YOUR_CHAT_ID_HERE"    # or env: TELEGRAM_CHAT_ID
+  admin_ids:                      # or env: TELEGRAM_ADMIN_IDS
     - "123456789"
-
-security:
-  restart_whitelist:
-    - "nginx"
-    - "docker"
-  enable_2fa: false
+  rate_limit_window: 60           # seconds between duplicate alerts
 ```
 
-Additional config templates:
-- `service_monitoring.yml.example` — Critical service definitions
-- `ssh_targets.yml.example` — Remote monitoring targets
-- `network_config.yml.example` — Network monitoring thresholds
+The restart whitelist lives in `service_monitoring.yml`, not in the bot config:
+`/restart` accepts what `allowed_restart` and `critical_services` list there.
 
-See [docs/SETUP.md](docs/SETUP.md) for all configuration options.
+Additional config templates:
+- `service_monitoring.yml.example`: critical services and the restart whitelist
+- `ssh_targets.yml.example`: remote monitoring targets
+- `network_config.yml.example`: network monitoring thresholds
+
+Every option with its default: [config/README.md](config/README.md) and
+[docs/SETUP.md](docs/SETUP.md).
 
 ## Use Cases
 
 ### Perfect for
 
-- ✅ **Homelab monitoring** — Check all devices from Telegram, no SSH needed
-- ✅ **Raspberry Pi fleets** — Alert bot runs on 512MB devices alongside primary workload
-- ✅ **Self-hosted infrastructure** — Docker, systemd, network monitoring in one bot
-- ✅ **Prometheus integration** — Forward Alertmanager events to Telegram
-- ✅ **Script integration** — `simple_sender.sh` for cron jobs and backup scripts
+- ✅ **Homelab monitoring**: check every device from Telegram instead of SSH
+- ✅ **Raspberry Pi fleets**: the alert bot fits on a 512MB device next to its
+  primary workload
+- ✅ **Self-hosted infrastructure**: Docker, systemd, and network checks in one bot
+- ✅ **Prometheus integration**: forward Alertmanager events to Telegram
+- ✅ **Script integration**: `simple_sender.sh` for cron jobs and backup scripts
 
 ### Not recommended for
 
-- ❌ **Enterprise monitoring** (1000+ nodes) — Use Datadog, Grafana Cloud, or PagerDuty
-- ❌ **Public-facing alerting** — This is for private Telegram chats/groups
-- ❌ **Windows servers** — Linux-only (psutil basics work, but systemd/SSH features don't)
-- ❌ **Real-time dashboards** — Use Grafana for visualization, this is for alerts and quick checks
+- ❌ **Enterprise monitoring** (1000+ nodes): use Datadog, Grafana Cloud, or PagerDuty
+- ❌ **Public-facing alerting**: this is built for private chats and groups
+- ❌ **Windows servers**: Linux only. psutil basics work, systemd and SSH features do not
+- ❌ **Real-time dashboards**: use Grafana for visualization, this is for alerts
+  and quick checks
 
 ### vs. Alternatives
 
 | Solution | Pros | Cons |
 |----------|------|------|
-| **Uptime Kuma** | Web UI, beautiful dashboard | No Telegram commands, no remote management |
-| **Grafana OnCall** | Enterprise-grade, escalation | Complex setup, overkill for homelab |
+| **Uptime Kuma** | Web UI, good-looking dashboard | No Telegram commands, no remote management |
+| **Grafana OnCall** | Enterprise-grade, escalation | Complex setup, more than a homelab needs |
 | **Healthchecks.io** | Simple cron monitoring | No system metrics, no interactive commands |
 | **Netdata** | Deep metrics, auto-discovery | Heavy (300MB+), no Telegram interaction |
-| **This project** | Interactive commands, low-memory, seven components | No web UI, Linux-only |
+| **This project** | Interactive commands, runs on 512MB devices | No web UI, Linux only, 2FA in the alert bot only |
 
 ## Security
 
-| Layer | Mechanism | Purpose |
-|-------|-----------|---------|
-| 1 | Admin whitelist | Only approved Telegram user IDs can run privileged commands |
-| 2 | Service whitelist | Only explicitly allowed services can be restarted |
-| 3 | Optional 2FA | Token-based second factor for admin commands |
-| 4 | Token masking | Credential status logged without exposing values |
-| 5 | systemd sandboxing | `ProtectSystem=strict`, `NoNewPrivileges`, `PrivateTmp`, `MemoryMax` |
-| 6 | SSH key-only auth | Remote monitoring uses key-based authentication |
-| 7 | Config permissions | Config files created with `chmod 600` |
-| 8 | Input sanitization | sed/grep injection prevention in all user-facing inputs |
+| Layer | Mechanism | Where |
+|-------|-----------|-------|
+| 1 | Admin whitelist: only listed Telegram user IDs reach `/restart` | `interactive_bot.py`, `alert_bot.py` |
+| 2 | Service whitelist: `/restart` refuses anything outside `allowed_restart` plus `critical_services` | `interactive_bot.py` |
+| 3 | Optional 2FA: a one-time code before a restart, alert bot only | `alert_bot.py` |
+| 4 | Token masking: logs keep the first 10 characters and drop the rest, admin IDs are logged as a count | `config_loader.py` |
+| 5 | systemd sandboxing: `ProtectSystem=strict`, `NoNewPrivileges`, `PrivateTmp`, `MemoryMax` in all four units | `systemd/*.example` |
+| 6 | SSH key-only auth for remote collection | `metrics_collector.py` |
+| 7 | The installer creates config, log, and state dirs as `chmod 750` owned by the service user; `chmod 600` on the config file itself is a documented setup step | `install.sh`, `config/README.md` |
+| 8 | Input handling: service names must match a systemd name pattern, remote command arguments go through `shlex.quote` | `interactive_bot.py`, `metrics_collector.py` |
 
 Full security policy: [SECURITY.md](SECURITY.md)
 
@@ -223,14 +284,14 @@ Full security policy: [SECURITY.md](SECURITY.md)
 ```
 telegram-multi-device-monitor/
 ├── src/
-│   ├── interactive_bot.py      # Full-featured monitoring bot (922 LOC)
-│   ├── alert_bot.py            # Lightweight alert bot (588 LOC)
-│   ├── prometheus_webhook.py   # Alertmanager receiver (387 LOC)
-│   ├── metrics_collector.py    # Local + SSH metric collection (453 LOC)
-│   ├── alert_sender.py         # Formatted status messages (345 LOC)
-│   ├── config_loader.py        # YAML config with env overrides (307 LOC)
-│   ├── simple_sender.sh        # CLI message sender (332 LOC)
-│   ├── token_fetcher.sh        # Secret manager integration (269 LOC)
+│   ├── interactive_bot.py      # Full-featured monitoring bot
+│   ├── alert_bot.py            # Lightweight alert bot with 2FA
+│   ├── prometheus_webhook.py   # Alertmanager receiver
+│   ├── metrics_collector.py    # Local + SSH metric collection
+│   ├── alert_sender.py         # Formatted status messages
+│   ├── config_loader.py        # YAML config with env overrides
+│   ├── simple_sender.sh        # CLI message sender
+│   ├── token_fetcher.sh        # Secret manager integration
 │   └── lib/
 │       ├── alerts.sh           # Alert deduplication and rate limiting
 │       ├── file_utils.sh       # Atomic file operations
@@ -239,7 +300,8 @@ telegram-multi-device-monitor/
 │   ├── telegram_config.yml.example
 │   ├── service_monitoring.yml.example
 │   ├── ssh_targets.yml.example
-│   └── network_config.yml.example
+│   ├── network_config.yml.example
+│   └── README.md               # Every option with its default
 ├── systemd/
 │   ├── telegram-interactive-bot.service.example
 │   ├── telegram-alert-bot.service.example
@@ -252,7 +314,8 @@ telegram-multi-device-monitor/
 │   ├── EXAMPLES.md             # Usage examples
 │   └── TROUBLESHOOTING.md      # Common issues and solutions
 ├── .github/workflows/
-│   └── lint.yml                # CI: black, mypy, shellcheck, yamllint
+│   ├── lint.yml                # CI: black, mypy, shellcheck, yamllint
+│   └── release.yml             # Release automation
 ├── install.sh                  # Interactive installer
 ├── requirements.txt            # Python dependencies
 ├── SECURITY.md                 # Security policy and best practices
@@ -271,25 +334,29 @@ telegram-multi-device-monitor/
 | [API_REFERENCE.md](docs/API_REFERENCE.md) | All commands, config options, environment variables |
 | [EXAMPLES.md](docs/EXAMPLES.md) | Practical usage examples |
 | [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues and solutions |
+| [config/README.md](config/README.md) | Config files, env overrides, file permissions |
 
 ## Requirements
 
 **Minimum**:
-- Python 3.10+ (for type hints and modern syntax)
-- Bash 5.0+ (for Bash components)
+- Python 3.10+ (for the type-hint syntax used throughout `src/`)
+- Bash 5.0+ (for the Bash components)
 - 512MB RAM (alert bot) or 256MB+ free (interactive bot)
-- systemd (for service management)
+- systemd (for the shipped units and the service checks)
 
-**Python packages**:
+**Python packages** (see `requirements.txt` for the upper bounds):
 - `python-telegram-bot` >= 21.0
 - `psutil` >= 5.9.0
 - `flask` >= 3.0.0 (Prometheus webhook only)
 - `pyyaml` >= 6.0
 - `aiohttp` >= 3.9.0
+- `requests` >= 2.31.0
 
 **Optional**:
-- `jq`, `curl` (for Bash components)
-- Prometheus + Alertmanager (for webhook integration)
+- `jq`, `curl` (for the Bash components)
+- Prometheus and Alertmanager (for the webhook)
+- `paramiko` >= 3.0.0, commented out in `requirements.txt`, for
+  `RemoteMetricsCollector`
 
 ## Compatibility
 
@@ -301,46 +368,47 @@ telegram-multi-device-monitor/
 **Should work** (untested):
 - Other systemd-based distributions
 - Fedora, Rocky Linux, Arch Linux
-- WSL2 (without systemd features)
+- WSL2 (without the systemd features)
 
 **Not supported**:
-- macOS, Windows (use [cc-telegram-bot](https://github.com/fidpa/cc-telegram-bot) for macOS)
-- Alpine Linux (musl libc, psutil may need compilation)
+- macOS, Windows (use [cc-telegram-bot](https://github.com/fidpa/cc-telegram-bot) on macOS)
+- Alpine Linux (musl libc, psutil may need to be compiled)
 
 ## Contributing
 
-Contributions welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions welcome, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 **Areas where help is appreciated**:
 - Additional metric collectors (GPU monitoring, ZFS pool status)
-- Webhook mode for environments behind reverse proxies
-- Grafana dashboard templates for collected metrics
+- Webhook mode for setups behind a reverse proxy
+- 2FA in the interactive bot, matching the alert bot
+- Grafana dashboard templates for the collected metrics
 - Testing on additional platforms (Fedora, Rocky Linux, Arch)
-- Internationalization (currently English-only bot messages)
+- Internationalization, the bot messages are English only
 - Container-based deployment (Dockerfile)
 
 ## License
 
-MIT License — see [LICENSE](LICENSE)
+MIT License, see [LICENSE](LICENSE)
 
 ## Author
 
 Marc Allgeier ([@fidpa](https://github.com/fidpa))
 
-**Why I Built This**: I run a Pi 5 as a network gateway, a NAS with 38 Docker containers, and 5 Pi Zeros for monitoring tasks. Checking each device meant SSH-ing in separately — impractical from a phone. I needed something that lets me type `/status` in Telegram and see all devices at a glance, with alerts that don't flood my chat. The multi-component architecture emerged from a real constraint: the Pi Zeros have 512MB RAM and can't run a full monitoring bot. So I built a 25MB alert bot for constrained devices and a full-featured interactive bot for the server.
+The framework grew out of one constraint. The Pi Zeros in my setup have 512MB RAM
+and no room for a full bot, so the alert bot had to be small enough to sit next
+to their actual job, while the server could carry the interactive one. Everything
+else here, the shared config loader, the Bash sender, the dedup state, followed
+from having to keep those two in sync.
 
 ## See Also
 
-- [cc-telegram-bot](https://github.com/fidpa/cc-telegram-bot) — Claude Code remote access via Telegram (24 security layers)
-- [ubuntu-server-security](https://github.com/fidpa/ubuntu-server-security) — Server hardening (14 components, CIS Benchmark)
-- [bash-production-toolkit](https://github.com/fidpa/bash-production-toolkit) — Production-ready Bash libraries
-- [linux-monitoring-templates](https://github.com/fidpa/linux-monitoring-templates) — Bash/Python monitoring templates
+- [cc-telegram-bot](https://github.com/fidpa/cc-telegram-bot): Claude Code remote access via Telegram (24 security layers)
+- [ubuntu-server-security](https://github.com/fidpa/ubuntu-server-security): server hardening (14 components, CIS Benchmark)
+- [bash-production-toolkit](https://github.com/fidpa/bash-production-toolkit): production-ready Bash libraries
+- [linux-monitoring-templates](https://github.com/fidpa/linux-monitoring-templates): Bash and Python monitoring templates
 
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/fidpa/telegram-multi-device-monitor/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/fidpa/telegram-multi-device-monitor/discussions)
-
----
-
-**Production-tested since 2025** | 11 source files | ~4,300 lines of code | ~2,500 lines of documentation

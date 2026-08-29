@@ -108,6 +108,27 @@ Show welcome message with command overview.
 Show all available commands.
 Admins see additional admin commands.
 
+### Alert Bot Commands
+
+The alert bot (`src/alert_bot.py`) registers its own, smaller set. Aliases are an
+interactive-bot feature; the alert bot has none.
+
+#### `/start`
+Show the welcome message.
+
+#### `/status`
+System overview, collected on demand.
+
+#### `/restart <service>`
+Restart a whitelisted service. Admin only, and it asks for a 2FA code first
+unless the admin session is still valid.
+
+#### `/auth <code>`
+Submit the 2FA code that `/restart` requested.
+
+#### `/memory`
+Bot process memory, system RAM, swap, and the configured `memory.threshold_mb`.
+
 ---
 
 ## Configuration Reference
